@@ -8,6 +8,7 @@ const express = require('express')
 const app = express()
 const handler = require('./function/handler');
 const bodyParser = require('body-parser')
+const parseDuration = require('parse-duration');
 
 const defaultMaxSize = '100kb' // body-parser default
 
@@ -133,8 +134,25 @@ app.options('/*', middleware);
 
 const port = process.env.http_port || 3000;
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`node14 listening on port: ${port}`)
 });
 
+server.timeout = (() => {
+    // xxx_timeout environments variables are expected to exist, 
+    // given that they are defined in template's Dockerfile
+    // => no default value is required
+    const execTimeout = parseDuration(process.env.exec_timeout)
+    const readTimeout = parseDuration(process.env.read_timeout)
+    const writeTimeout = parseDuration(process.env.write_timeout)
 
+    if (execTimeout === 0 || readTimeout === 0 || writeTimeout === 0) {
+        // If one of the function's timeouts is 0, disable Node.js server timeout
+        return 0;
+    } else {
+        // Else, use the maximum timeout value.
+        // Reinjecting server.timeout allows to not impact existing functions for which 
+        // the default server timeout may be specified as command line argument.
+        return Math.max(server.timeout, execTimeout, readTimeout, writeTimeout);
+    }
+})();
